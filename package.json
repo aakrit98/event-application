@@ -4,9 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/server.ts",
+"dev": "nodemon --exec \"ts-node --files\" src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "migrate": "knex --knexfile src/db/knexfile.ts migrate:latest",
+    "migrate:rollback": "knex --knexfile src/db/knexfile.ts migrate:rollback",
+    "migrate:make": "knex --knexfile src/db/knexfile.ts migrate:make",
+    "seed": "knex --knexfile src/db/knexfile.ts seed:run"
   },
   "keywords": [],
   "author": "",
@@ -14,20 +18,25 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.3.0",
     "mysql2": "^3.24.3",
+    "otplib": "^13.5.0",
+    "qrcode": "^1.5.4",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.4.1",
+    "@types/qrcode": "^1.5.6",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
