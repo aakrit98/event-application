@@ -21,8 +21,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes); 
-app.use("/api/event" ,eventRoutes );
-
+app.use("/api/events", eventRoutes);
 // Must be registered LAST, after every route — this is what catches
 // thrown/rejected errors from any controller above and turns them
 // into clean JSON responses instead of crashing the server.
