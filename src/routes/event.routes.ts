@@ -1,13 +1,13 @@
 import { Router } from "express";
 import * as eventController from "../controllers/event.controller";
-import { requireAuth} from "../middleware/auth.middleware"; 
+import { requireAuth, optionalAuth } from "../middleware/auth.middleware"; 
 import { requireEventOwnership} from "../middleware/ownership.middleware";
 
 
 const router = Router(); 
 
 //public viewing 
-router.get("/" , eventController.listEvents); 
+router.get("/", optionalAuth, eventController.listEvents); 
 router.get("/:id", eventController.getEvent);
 
 //login to create event

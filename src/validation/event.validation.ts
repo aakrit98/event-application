@@ -13,7 +13,8 @@ export const createEventSchema = z
     start_at: z.coerce.date({ error: "A valid start date/time is required" }),
     end_at: z.coerce.date().optional().nullable(),
     event_type: z.enum(["public", "private"]).default("public"),
-    tagIds: z.array(z.number().int().positive()).optional().default([]),
+    tagIds: z.array(z.number().int().positive()).optional().default([]), 
+    image_url: z.string().url().optional().nullable(),
   })
   .refine((data) => !data.end_at || data.end_at >= data.start_at, {
     message: "End date/time cannot be before the start date/time",
@@ -33,6 +34,7 @@ export const updateEventSchema = z
     end_at: z.coerce.date().optional().nullable(),
     event_type: z.enum(["public", "private"]).optional(),
     tagIds: z.array(z.number().int().positive()).optional(),
+    image_url: z.string().url().optional().nullable(),
   })
   .refine(
     (data) => !data.start_at || !data.end_at || data.end_at >= data.start_at,
@@ -58,6 +60,10 @@ export const listEventsQuerySchema = z.object({
   search: z.string().trim().optional(),
   sortBy: z.enum(["start_at", "created_at", "title"]).default("start_at"),
   sortOrder: z.enum(["asc", "desc"]).default("asc"),
+  mine: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((val) => val === "true" || val === "1"),
 });
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;

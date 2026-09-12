@@ -1,5 +1,11 @@
-declare namespace Express {
-  interface Request {
-    user?: { id: number };
+import "multer";
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { id: number };
+    }
   }
 }
+
+export {};

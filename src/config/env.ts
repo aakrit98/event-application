@@ -37,4 +37,10 @@ export const env = {
   },
 
   frontendOrigin: required("FRONTEND_ORIGIN", "http://localhost:5173"),
+
+  cloudinary: {
+    cloudName: required("CLOUDINARY_CLOUD_NAME"),
+    apiKey: required("CLOUDINARY_API_KEY"),
+    apiSecret: required("CLOUDINARY_API_SECRET"),
+  },
 };

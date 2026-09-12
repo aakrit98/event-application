@@ -11,8 +11,22 @@ export async function createEvent(req:Request , res:Response): Promise<void> {
     
 
 export async function listEvents(req:Request , res: Response): Promise<void> {
-    const query = listEventsQuerySchema.parse(req.query); 
-    const result = await eventService.listEvents(query); 
+    const query = listEventsQuerySchema.parse(req.query);
+
+    if (query.mine) {
+      if (!req.user) {
+        res.status(401).json({ error: "Not authenticated. Please log in." });
+        return;
+      }
+      const result = await eventService.listEvents({
+        ...query,
+        creatorId: req.user.id,
+      });
+      res.status(200).json(result);
+      return;
+    }
+
+    const result = await eventService.listEvents(query);
     res.status(200).json(result);
 } 
 

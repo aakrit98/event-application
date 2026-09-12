@@ -14,7 +14,8 @@ export interface EventRow {
   event_type: "public" | "private";
   creator_id: number;
   created_at: Date;
-  updated_at: Date;
+  updated_at: Date; 
+  image_url : string | null;
 }
 
 export interface EventTag { 
@@ -60,7 +61,10 @@ async function getTagsForEvents(eventIds: number[]): Promise<Record<number, Even
 
 // Shared between the data query and the count query so the two never
 // drift out of sync — whatever narrows the results narrows the count too.
-function applyEventFilters(qb: Knex.QueryBuilder, filters: ListEventsQuery): void {
+function applyEventFilters(
+  qb: Knex.QueryBuilder,
+  filters: ListEventsQuery & { creatorId?: number }
+): void {
   const now = new Date();
 
   if (filters.timeframe === "upcoming") {
@@ -86,9 +90,15 @@ function applyEventFilters(qb: Knex.QueryBuilder, filters: ListEventsQuery): voi
   if (filters.tagIds && filters.tagIds.length > 0) {
     qb.join("event_tags as et", "et.event_id", "e.id").whereIn("et.tag_id", filters.tagIds);
   }
+
+  if (filters.creatorId !== undefined) {
+    qb.where("e.creator_id", filters.creatorId);
+  }
 }
 
-export async function listEvents(filters: ListEventsQuery): Promise<PaginatedEvents> {
+export async function listEvents(
+  filters: ListEventsQuery & { creatorId?: number }
+): Promise<PaginatedEvents> {
   const offset = (filters.page - 1) * filters.limit;
   const hasTagFilter = !!filters.tagIds && filters.tagIds.length > 0;
 
@@ -160,6 +170,7 @@ export async function createEvent(
       end_at: data.end_at ?? null,
       event_type: data.event_type,
       creator_id: creatorId,
+      image_url: data.image_url ?? null,
     });
 
     if (data.tagIds.length > 0) {
@@ -187,6 +198,7 @@ export async function updateEvent(
     if (data.start_at !== undefined) updateFields.start_at = data.start_at;
     if (data.end_at !== undefined) updateFields.end_at = data.end_at;
     if (data.event_type !== undefined) updateFields.event_type = data.event_type;
+if (data.image_url !== undefined) updateFields.image_url = data.image_url;
 
     if (Object.keys(updateFields).length > 0) {
       await trx("events").where({ id }).update({ ...updateFields, updated_at: trx.fn.now() });
