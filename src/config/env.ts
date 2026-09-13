@@ -42,5 +42,21 @@ export const env = {
     cloudName: required("CLOUDINARY_CLOUD_NAME"),
     apiKey: required("CLOUDINARY_API_KEY"),
     apiSecret: required("CLOUDINARY_API_SECRET"),
+  }, 
+
+
+    esewa: {
+    merchantCode: required("ESEWA_MERCHANT_CODE", "EPAYTEST"),
+    secretKey: required("ESEWA_SECRET_KEY", "8gBm/:&EnhH.1/q"),
+    paymentUrl: required(
+      "ESEWA_PAYMENT_URL",
+      "https://rc-epay.esewa.com.np/api/epay/main/v2/form"
+    ),
+    statusCheckUrl: required(
+      "ESEWA_STATUS_CHECK_URL",
+      "https://rc.esewa.com.np/api/epay/transaction/status/"
+    ),
+    successUrl: required("ESEWA_SUCCESS_URL", "http://localhost:4000/api/payments/success"),
+    failureUrl: required("ESEWA_FAILURE_URL", "http://localhost:4000/api/payments/failure"),
   },
 };

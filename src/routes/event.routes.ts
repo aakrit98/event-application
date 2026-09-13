@@ -16,6 +16,7 @@ router.post("/" ,requireAuth ,eventController.createEvent);
 router.put("/:id", requireAuth, requireEventOwnership, eventController.updateEvent);
 router.delete("/:id", requireAuth, requireEventOwnership, eventController.deleteEvent);
 
-router.post("/:id/tickets", requireAuth, requireEventOwnership, ticketController.createTicket);
+router.post("/:id/tickets", requireAuth, requireEventOwnership, ticketController.createTicket); 
+router.get("/:id/tickets" , ticketController.listEventTickets);
 
 export default router;
