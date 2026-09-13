@@ -33,8 +33,3 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists("events");
 } 
 
-export async function ups(knex: Knex) :Promise<void> { 
-  await knex.schema.alterTable("events" , (table) => { 
-    table.string("image_url" , 500).nullable();
-  });
-}

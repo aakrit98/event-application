@@ -7,6 +7,7 @@ import eventRoutes from "./routes/event.routes"
 import tagRoutes from "./routes/tag.routes";
 import uploadRoutes from "./routes/upload.routes";
 import { errorHandler } from "./middleware/error.middleware";
+import ticketRoutes from "./routes/ticket.routes";
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api/tags" , tagRoutes);
 // thrown/rejected errors from any controller above and turns them
 // into clean JSON responses instead of crashing the server. 
 app.use("/api/uploads" , uploadRoutes);
-app.use(errorHandler);
+app.use(errorHandler); 
+app.use("/api/tickets" , ticketRoutes);
 
 export default app;
