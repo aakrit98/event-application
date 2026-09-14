@@ -5,12 +5,15 @@ import { error } from "node:console";
 
 export async function createEvent(req:Request , res:Response): Promise<void> { 
     const input = createEventSchema.parse(req.body);
-    const event = await eventService.createEvent(req.user!.id , input);
+    const event = await eventService.createEvent(req.user!.id , input); 
+    console.log("send by user" , req.user);
     res.status(201).json({event});
 } 
     
 
-export async function listEvents(req:Request , res: Response): Promise<void> {
+export async function listEvents(req:Request , res: Response): Promise<void> { 
+
+  console.log("req.userss" , req.user);
     const query = listEventsQuerySchema.parse(req.query);
 
     if (query.mine) {
@@ -20,8 +23,11 @@ export async function listEvents(req:Request , res: Response): Promise<void> {
       }
       const result = await eventService.listEvents({
         ...query,
-        creatorId: req.user.id,
-      });
+        creatorId: req.user.id, 
+       
+
+      }); 
+      console.log("fir creators id" , result);
       res.status(200).json(result);
       return;
     }

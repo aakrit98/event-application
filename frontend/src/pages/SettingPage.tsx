@@ -16,7 +16,8 @@ import {
   QuestionCircleOutlined,
   LogoutOutlined,
   CalendarOutlined,
-  ShoppingOutlined,
+  GlobalOutlined,
+  LockFilled,
   KeyOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../context/AuthContext";
@@ -35,34 +36,74 @@ export default function SettingsPage() {
   const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  // Notification states (Email toggle removed)
+  // Notification toggles (email notification removed)
   const [pushNotif, setPushNotif] = useState(true);
   const [eventReminders, setEventReminders] = useState(true);
   const [followerAlerts, setFollowerAlerts] = useState(false);
 
+  // Extract user ID safely across all possible auth shapes
+  const currentUserId =
+    user?.id ??
+    (user as any)?._id ??
+    (user as any)?.userId ??
+    (user as any)?.user_id ??
+    (user as any)?.sub;
+
+  const username =
+    (user as { name?: string; username?: string; email?: string })?.username ||
+    (user as { name?: string; username?: string; email?: string })?.name ||
+    user?.email?.split("@")[0] ||
+    "User";
+
   useEffect(() => {
     async function loadStats() {
+      if (currentUserId == null) return;
+
       try {
         setLoading(true);
-        const res = await eventsApi.listEvents({ timeframe: "all" });
-        const eventList: Event[] = Array.isArray(res) ? res : (res as any)?.events || [];
-        const userEvents = eventList.filter((e: Event) => e.creator_id === user?.id);
-        setMyEvents(userEvents);
-      } catch {
-        // Fallback gracefully if network/API fails
+        // Request with high limit so all events are retrieved
+        const res: any = await eventsApi.listEvents({
+          timeframe: "all",
+          limit: 100,
+        } as any);
+
+        // Robust unpacking for { data: [...] }, { data: { data: [...] } }, or direct array
+        let rawList: any[] = [];
+        if (Array.isArray(res)) {
+          rawList = res;
+        } else if (Array.isArray(res?.data)) {
+          rawList = res.data;
+        } else if (Array.isArray(res?.data?.data)) {
+          rawList = res.data.data;
+        } else if (Array.isArray(res?.events)) {
+          rawList = res.events;
+        }
+
+        console.log("Settings - Current User ID:", currentUserId);
+        console.log("Settings - All events from API:", rawList);
+
+        // Filter by creator_id matching current user's ID
+        const userCreated = rawList.filter((item: any) => {
+          const creatorId = item.creator_id ?? item.creatorId ?? item.user_id;
+          return Number(creatorId) === Number(currentUserId);
+        });
+
+        console.log("Settings - User created events:", userCreated);
+        setMyEvents(userCreated);
+      } catch (err) {
+        console.error("Failed to load user events stats:", err);
       } finally {
         setLoading(false);
       }
     }
-    if (user?.id) loadStats();
-  }, [user?.id]);
 
+    loadStats();
+  }, [currentUserId]);
+
+  // Real event counts
   const totalCreated = myEvents.length;
-  const privateEvents = myEvents.filter((e) => e.event_type === "private");
-  const privateTicketsSold = privateEvents.reduce(
-    (acc, curr) => acc + ((curr as any).tickets_sold ?? 0),
-    0
-  );
+  const publicEvents = myEvents.filter((e) => e.event_type === "public").length;
+  const privateEvents = myEvents.filter((e) => e.event_type === "private").length;
 
   async function handleLogout() {
     try {
@@ -77,12 +118,20 @@ export default function SettingsPage() {
   return (
     <div style={{ minHeight: "100vh", background: NAVY_BG, padding: "36px 24px" }}>
       <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <Typography.Title level={2} style={{ color: NAVY, fontWeight: 700, marginBottom: 28 }}>
-          Settings
-        </Typography.Title>
+        
+        {/* Header Greeting */}
+        <div style={{ marginBottom: 28 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>
+            Settings
+          </span>
+          <Typography.Title level={2} style={{ color: NAVY, fontWeight: 800, margin: "4px 0 0" }}>
+            Hello, {username}! 👋
+          </Typography.Title>
+        </div>
 
         <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
-          {/* LEFT SIDEBAR NAVIGATION */}
+          
+          {/* LEFT SIDEBAR */}
           <div
             style={{
               width: 230,
@@ -155,42 +204,56 @@ export default function SettingsPage() {
 
           {/* MAIN SETTINGS CONTENT */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 24 }}>
-            {/* 1. ACCOUNT DETAILS & EVENT STATS */}
+            
+            {/* ACCOUNT DETAILS & STATS */}
             <div style={{ background: "#fff", borderRadius: 16, padding: "28px 32px", boxShadow: "0 4px 20px rgba(13,27,62,0.04)" }}>
               <Typography.Title level={4} style={{ color: NAVY, fontWeight: 700, margin: "0 0 20px" }}>
                 Account Details
               </Typography.Title>
 
-              {/* STATS OVERVIEW: Events Created & Private Ticket Sales */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
+              {/* REAL DATA COUNTS */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
+                {/* Total Events Created */}
                 <div style={{ background: "#f8fafc", padding: "16px 20px", borderRadius: 12, border: "1px solid #e8eff6" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#627d98" }}>
-                    <CalendarOutlined style={{ color: NAVY, fontSize: 18 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Events Created</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#627d98" }}>
+                    <CalendarOutlined style={{ color: NAVY, fontSize: 16 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Total Created</span>
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: NAVY, marginTop: 8 }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: NAVY, marginTop: 8 }}>
                     {loading ? <Spin size="small" /> : totalCreated}
                   </div>
                 </div>
 
+                {/* Public Events */}
                 <div style={{ background: "#f8fafc", padding: "16px 20px", borderRadius: 12, border: "1px solid #e8eff6" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#0ea5e9" }}>
-                    <ShoppingOutlined style={{ color: "#0ea5e9", fontSize: 18 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Private Event Tickets Sold</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#627d98" }}>
+                    <GlobalOutlined style={{ color: "#16a34a", fontSize: 16 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Public Events</span>
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: NAVY, marginTop: 8 }}>
-                    {loading ? <Spin size="small" /> : `${privateTicketsSold} (${privateEvents.length} private)`}
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#16a34a", marginTop: 8 }}>
+                    {loading ? <Spin size="small" /> : publicEvents}
+                  </div>
+                </div>
+
+                {/* Private Events */}
+                <div style={{ background: "#f8fafc", padding: "16px 20px", borderRadius: 12, border: "1px solid #e8eff6" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#627d98" }}>
+                    <LockFilled style={{ color: "#ea580c", fontSize: 16 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Private Events</span>
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#ea580c", marginTop: 8 }}>
+                    {loading ? <Spin size="small" /> : privateEvents}
                   </div>
                 </div>
               </div>
 
-              {/* User Name & Email */}
+              {/* Name & Email Fields */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
                 <div>
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 6 }}>
                     Full Name
                   </label>
-                  <Input size="large" value={user?.name || "User"} readOnly style={{ borderRadius: 8, background: "#f8fafc" }} />
+                  <Input size="large" value={user?.name || username} readOnly style={{ borderRadius: 8, background: "#f8fafc" }} />
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 6 }}>
@@ -214,7 +277,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 2. NOTIFICATION PREFERENCES */}
+            {/* NOTIFICATION PREFERENCES */}
             <div style={{ background: "#fff", borderRadius: 16, padding: "28px 32px", boxShadow: "0 4px 20px rgba(13,27,62,0.04)" }}>
               <Typography.Title level={4} style={{ color: NAVY, fontWeight: 700, margin: "0 0 16px" }}>
                 Notification Preferences
@@ -251,7 +314,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 3. DANGER ZONE */}
+            {/* DANGER ZONE */}
             <div style={{ background: "#fff", borderRadius: 16, padding: "26px 32px", border: "1px solid #fee2e2", boxShadow: "0 4px 20px rgba(239,68,68,0.03)" }}>
               <Typography.Title level={4} style={{ color: "#dc2626", fontWeight: 700, margin: "0 0 6px" }}>
                 Danger Zone
@@ -260,7 +323,7 @@ export default function SettingsPage() {
                 <div>
                   <strong style={{ color: NAVY, fontSize: 14 }}>Delete Eventify Account</strong>
                   <p style={{ margin: "4px 0 0", color: "#8b98a9", fontSize: 13 }}>
-                    Permanently purge all hosted profiles, bookings, and ticket history. This cannot be undone.
+                    Permanently purge all hosted profiles, bookings, and ticket history.
                   </p>
                 </div>
                 <Popconfirm
@@ -276,7 +339,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 4. LOGOUT CONFIRMATION BANNER */}
+            {/* LOGOUT CONFIRMATION */}
             {showLogoutConfirm && (
               <div
                 style={{
@@ -291,48 +354,26 @@ export default function SettingsPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 10,
-                      background: "rgba(255,255,255,0.12)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 18,
-                    }}
-                  >
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
                     <LogoutOutlined />
                   </div>
                   <div>
-                    <strong style={{ fontSize: 15, display: "block" }}>
-                      {user?.name || "User"}, are you leaving?
-                    </strong>
-                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
-                      Confirm if you want to sign out of Eventify on this web session.
-                    </span>
+                    <strong style={{ fontSize: 15, display: "block" }}>{username}, are you leaving?</strong>
+                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>Confirm if you want to sign out of Eventify.</span>
                   </div>
                 </div>
 
                 <div style={{ display: "flex", gap: 10 }}>
-                  <Button
-                    onClick={() => setShowLogoutConfirm(false)}
-                    style={{ background: "transparent", color: "#fff", borderColor: "rgba(255,255,255,0.3)", borderRadius: 8 }}
-                  >
+                  <Button onClick={() => setShowLogoutConfirm(false)} style={{ background: "transparent", color: "#fff", borderColor: "rgba(255,255,255,0.3)", borderRadius: 8 }}>
                     Cancel
                   </Button>
-                  <Button
-                    type="primary"
-                    danger
-                    onClick={handleLogout}
-                    style={{ borderRadius: 8, fontWeight: 600 }}
-                  >
+                  <Button type="primary" danger onClick={handleLogout} style={{ borderRadius: 8, fontWeight: 600 }}>
                     Log Out
                   </Button>
                 </div>
               </div>
             )}
+
           </div>
         </div>
       </div>

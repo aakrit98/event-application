@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   Input,
   Select,
@@ -19,7 +19,6 @@ import {
   ControlOutlined,
   PlusOutlined,
   EnvironmentOutlined,
-  CalendarOutlined,
   ClockCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -27,7 +26,6 @@ import { useAuth } from "../context/AuthContext";
 import * as eventsApi from "../api/events";
 import * as tagsApi from "../api/tags";
 import type { Event, Tag } from "../types";
-import type { ListEventsParams } from "../api/events";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -57,7 +55,18 @@ const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80";
 
 export default function EventListPage() {
+  const location = useLocation();
   const { user } = useAuth();
+
+  const isMyEventsRoute = location.pathname === "/my-events";
+
+  // Robust ID resolver: handles user.id, user.userId, user.user_id, or token sub
+  const currentUserId =
+    user?.id ??
+    (user as any)?._id ??
+    (user as any)?.userId ??
+    (user as any)?.user_id ??
+    (user as any)?.sub;
 
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
@@ -69,17 +78,20 @@ export default function EventListPage() {
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Pagination calculation: Page 1 shows 3, subsequent pages show 6
   const getPageLimit = (page: number) => (page === 1 ? 3 : 6);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const limit = getPageLimit(filters.page);
-      const offset = filters.page === 1 ? 0 : 3 + (filters.page - 2) * 6;
+      const limit = isMyEventsRoute ? 100 : getPageLimit(filters.page);
+      const offset = isMyEventsRoute
+        ? 0
+        : filters.page === 1
+        ? 0
+        : 3 + (filters.page - 2) * 6;
 
-      const params: ListEventsParams & { offset?: number; location?: string } = {
-        page: filters.page,
+      const params: any = {
+        page: isMyEventsRoute ? 1 : filters.page,
         limit,
         offset,
         timeframe: filters.timeframe,
@@ -91,15 +103,56 @@ export default function EventListPage() {
         sortOrder: filters.sortOrder,
       };
 
-      const result = await eventsApi.listEvents(params);
-      setEvents(result.data);
-      setTotal(result.pagination?.total ?? result.data.length);
-    } catch {
+      // Pass user ID in query params in case backend filters server-side
+      if (isMyEventsRoute && currentUserId != null) {
+        params.creator_id = Number(currentUserId);
+        params.user_id = Number(currentUserId);
+      }
+
+      const res = await eventsApi.listEvents(params);
+
+      // Unpack response: handles res.data, res.data.data, or direct array
+      let rawList: any[] = [];
+      if (Array.isArray(res)) {
+        rawList = res;
+      } else if (Array.isArray(res?.data)) {
+        rawList = res.data;
+      } else if (Array.isArray((res as any)?.data?.data)) {
+        rawList = (res as any).data.data;
+      } else if (Array.isArray((res as any)?.events)) {
+        rawList = (res as any).events;
+      }
+
+      console.log("Logged-in user ID:", currentUserId);
+      console.log("Events received from API:", rawList);
+
+      if (isMyEventsRoute) {
+        if (currentUserId == null) {
+          setEvents([]);
+          setTotal(0);
+          return;
+        }
+
+        // Filter by creator_id or creatorId
+        const myHosted = rawList.filter((item: any) => {
+          const itemCreatorId = item.creator_id ?? item.creatorId ?? item.user_id;
+          return Number(itemCreatorId) === Number(currentUserId);
+        });
+
+        console.log("Matched events for user:", myHosted);
+        setEvents(myHosted);
+        setTotal(myHosted.length);
+      } else {
+        setEvents(rawList);
+        setTotal((res as any)?.pagination?.total ?? (res as any)?.total ?? rawList.length);
+      }
+    } catch (err) {
+      console.error("Failed to load events:", err);
       message.error("Failed to load events.");
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, isMyEventsRoute, currentUserId]);
 
   useEffect(() => {
     fetchEvents();
@@ -141,7 +194,6 @@ export default function EventListPage() {
     }
   }
 
-  // Active filter count indicator for the control button
   const activeFiltersCount =
     (filters.event_type ? 1 : 0) +
     (filters.timeframe !== "all" ? 1 : 0) +
@@ -173,7 +225,7 @@ export default function EventListPage() {
               margin: 0,
             }}
           >
-            Discover Events That Inspire You
+            {isMyEventsRoute ? "My Hosted Events" : "Discover Events That Inspire You"}
           </Title>
           <Paragraph
             style={{
@@ -183,7 +235,9 @@ export default function EventListPage() {
               margin: "12px auto 32px",
             }}
           >
-            Explore live concerts, tech summits, nightlife gatherings, and exclusive masterclasses happening around you.
+            {isMyEventsRoute
+              ? "Manage, edit, and keep track of all the events you've created."
+              : "Explore live concerts, tech summits, nightlife gatherings, and exclusive masterclasses happening around you."}
           </Paragraph>
 
           {/* Search Capsule & Filter Button */}
@@ -198,7 +252,6 @@ export default function EventListPage() {
               margin: "0 auto",
             }}
           >
-            {/* Pill Search Capsule */}
             <div
               style={{
                 flex: "1 1 500px",
@@ -256,7 +309,6 @@ export default function EventListPage() {
               </Button>
             </div>
 
-            {/* Filter Toggle Button */}
             <Button
               onClick={() => setShowFilters(!showFilters)}
               style={{
@@ -292,7 +344,7 @@ export default function EventListPage() {
             </Button>
           </div>
 
-          {/* Smooth Collapsible Filters Panel */}
+          {/* Collapsible Filters */}
           <div
             style={{
               display: "grid",
@@ -411,9 +463,8 @@ export default function EventListPage() {
         </div>
       </div>
 
-      {/* MAIN EVENT LIST SECTION */}
+      {/* EVENT LIST CONTENT */}
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px 80px" }}>
-        {/* Results Header */}
         <div
           style={{
             display: "flex",
@@ -424,10 +475,10 @@ export default function EventListPage() {
         >
           <div>
             <Title level={3} style={{ margin: 0, fontWeight: 700, color: "#0f172a" }}>
-              Explore Events
+              {isMyEventsRoute ? "My Hosted Events" : "Explore Events"}
             </Title>
             <Text type="secondary" style={{ fontSize: 14 }}>
-              Showing {events.length} of {total} available events
+              Showing {events.length} {isMyEventsRoute ? "hosted" : "available"} events
             </Text>
           </div>
 
@@ -449,7 +500,6 @@ export default function EventListPage() {
           </Link>
         </div>
 
-        {/* Loading Spinner */}
         {loading ? (
           <div style={{ textAlign: "center", padding: "100px 0" }}>
             <Spin size="large" tip="Loading events..." />
@@ -458,20 +508,31 @@ export default function EventListPage() {
           <Empty
             description={
               <span style={{ color: "#64748b", fontSize: 15 }}>
-                No events found matching your criteria.
+                {isMyEventsRoute
+                  ? "You haven't created any events yet."
+                  : "No events found matching your criteria."}
               </span>
             }
             style={{ padding: "60px 0" }}
           >
-            <Button onClick={handleResetFilters} style={{ borderRadius: 8 }}>
-              Clear Filters
-            </Button>
+            {isMyEventsRoute ? (
+              <Link to="/events/new">
+                <Button type="primary" style={{ borderRadius: 8, background: "#0d1b3e", borderColor: "#0d1b3e" }}>
+                  Create Your First Event
+                </Button>
+              </Link>
+            ) : (
+              <Button onClick={handleResetFilters} style={{ borderRadius: 8 }}>
+                Clear Filters
+              </Button>
+            )}
           </Empty>
         ) : (
-          /* EVENT GRID */
           <Row gutter={[28, 28]}>
             {events.map((event) => {
-              const isOwner = user?.id === event.creator_id;
+              const itemCreatorId = event.creator_id ?? (event as any).creatorId;
+              const isOwner =
+                currentUserId != null && Number(currentUserId) === Number(itemCreatorId);
               const eventDate = new Date(event.start_at);
               const month = eventDate.toLocaleString("en-US", { month: "short" }).toUpperCase();
               const day = eventDate.getDate();
@@ -500,7 +561,7 @@ export default function EventListPage() {
                       e.currentTarget.style.boxShadow = "0 4px 20px rgba(15, 23, 42, 0.06)";
                     }}
                   >
-                    {/* Event Banner Image with Date and Type badges */}
+                    {/* Banner */}
                     <Link
                       to={`/events/${event.id}`}
                       style={{
@@ -532,7 +593,6 @@ export default function EventListPage() {
                         }}
                       />
 
-                      {/* Access type badge */}
                       <span
                         style={{
                           position: "absolute",
@@ -555,7 +615,6 @@ export default function EventListPage() {
                         {event.event_type}
                       </span>
 
-                      {/* Date Badge */}
                       <div
                         style={{
                           position: "absolute",
@@ -577,7 +636,7 @@ export default function EventListPage() {
                       </div>
                     </Link>
 
-                    {/* Card Content */}
+                    {/* Content */}
                     <div
                       style={{
                         padding: "20px 22px",
@@ -586,7 +645,6 @@ export default function EventListPage() {
                         flex: 1,
                       }}
                     >
-                      {/* Tags */}
                       {event.tags && event.tags.length > 0 && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                           {event.tags.slice(0, 3).map((tag) => (
@@ -607,7 +665,6 @@ export default function EventListPage() {
                         </div>
                       )}
 
-                      {/* Event Title */}
                       <Link to={`/events/${event.id}`} style={{ textDecoration: "none" }}>
                         <h3
                           style={{
@@ -626,7 +683,6 @@ export default function EventListPage() {
                         </h3>
                       </Link>
 
-                      {/* Location & Time */}
                       <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <EnvironmentOutlined style={{ color: "#94a3b8" }} />
@@ -648,7 +704,6 @@ export default function EventListPage() {
                         </div>
                       </div>
 
-                      {/* Short Description */}
                       <p
                         style={{
                           fontSize: 13,
@@ -665,7 +720,6 @@ export default function EventListPage() {
                         {event.description}
                       </p>
 
-                      {/* Card Bottom Actions */}
                       <div
                         style={{
                           paddingTop: 14,
@@ -714,8 +768,8 @@ export default function EventListPage() {
           </Row>
         )}
 
-        {/* Custom Pagination (Page 1 = 3 items, later pages = 6 items) */}
-        {total > 3 && (
+        {/* Pagination on public list */}
+        {!isMyEventsRoute && total > 3 && (
           <div style={{ display: "flex", justifyContent: "center", marginTop: 48 }}>
             <Pagination
               current={filters.page}

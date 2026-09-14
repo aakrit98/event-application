@@ -7,7 +7,9 @@ import eventRoutes from "./routes/event.routes"
 import tagRoutes from "./routes/tag.routes";
 import uploadRoutes from "./routes/upload.routes";
 import { errorHandler } from "./middleware/error.middleware";
-import ticketRoutes from "./routes/ticket.routes";
+import ticketRoutes from "./routes/ticket.routes"; 
+import paymentRoutes from "./routes/payment.routes";
+
 
 const app = express();
 
@@ -31,6 +33,7 @@ app.use("/api/tags" , tagRoutes);
 // into clean JSON responses instead of crashing the server. 
 app.use("/api/uploads" , uploadRoutes);
 app.use(errorHandler); 
-app.use("/api/tickets" , ticketRoutes);
+app.use("/api/tickets" , ticketRoutes); 
+app.use("/api/payments", paymentRoutes);
 
 export default app;
