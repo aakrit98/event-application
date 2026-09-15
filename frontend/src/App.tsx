@@ -8,6 +8,7 @@ import EventDetailPage from "./pages/EventDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import EventListPage from "./pages/EventListPage";
 import SettingsPage from "./pages/SettingPage";
+import PaymentResultPage from "./pages/Paymentresultpage ";
 
 function App() {
   return (
@@ -33,7 +34,8 @@ function App() {
         <Route path="/my-events" element={<EventListPage />} />
         <Route path="/events/new" element={<EventFormPage />} />
         <Route path="/events/edit/:id" element={<EventFormPage />} /> 
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<SettingsPage />} /> 
+        <Route path="/payment-result" element={<PaymentResultPage/>}/>
       </Route>
     </Routes>
       </div>

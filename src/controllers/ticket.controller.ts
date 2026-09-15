@@ -14,6 +14,8 @@ export async function listEventTickets(req: Request, res: Response): Promise<voi
   res.status(200).json({ tickets });
 }
 
+// By the time this runs, requireAuth + requireEventOwnership have already
+// confirmed the event exists and belongs to req.user.
 export async function createTicket(req: Request, res: Response): Promise<void> {
   const eventId = Number(req.params.id);
   const input = createTicketSchema.parse(req.body);
@@ -23,17 +25,17 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
     res.status(404).json({ error: "Event not found." });
     return;
   }
-  if (event.event_type !== "private") {
-    res.status(400).json({
-      error: "Tickets can only be created for private events. Set the event to private first.",
-    });
-    return;
-  }
 
+  // Public events use price=0 tickets (free "seats" with a capacity
+  // limit); private events use priced tickets that go through eSewa.
+  // Both are now valid — this used to be restricted to private events
+  // only, but the same capacity-tracking system works for free RSVPs too.
   const ticket = await ticketService.createTicket(eventId, input);
   res.status(201).json({ ticket });
 }
 
+// By the time this runs, requireAuth + requireTicketOwnership have
+// already confirmed the ticket exists and belongs to an event req.user owns.
 export async function updateTicket(req: Request, res: Response): Promise<void> {
   const id = Number(req.params.id);
   const input = updateTicketSchema.parse(req.body);

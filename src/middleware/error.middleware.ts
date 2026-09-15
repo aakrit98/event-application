@@ -38,6 +38,11 @@ export function errorHandler(
       return;
     }
 
+    if (err.message === "EVENT_START_TOO_SOON") {
+      res.status(400).json({ error: "Events can only be created to start from tomorrow or later." });
+      return;
+    }
+
     if (err.message === "Only image files are allowed.") {
       res.status(400).json({ error: err.message });
       return;

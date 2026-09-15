@@ -1,20 +1,108 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Dropdown } from "antd";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Dropdown, Badge, Empty, Spin } from "antd";
 import type { MenuProps } from "antd";
 import { BellOutlined, UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from "@ant-design/icons";
 import { useAuth } from "../context/AuthContext";
+import * as notificationsApi from "../api/notifications";
+import type { Notification } from "../types";
+import { message } from "antd";
+
+function formatTimeAgo(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export default function NavbarPage() {
   const location = useLocation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user , logout } = useAuth();
   const [hoveredNav, setHoveredNav] = useState<string | null>(null);
 
+  // Notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+ 
+  const handleLogout = async() =>{ 
+    try { 
+      await logout();
+      message.success("Logout sucessfully");
+      navigate("/login");
+    } catch { 
+      message.error("Failed to log out"); 
+      navigate("/login");
+    }
+  }
+  useEffect(() => {
+    loadNotifications();
+
+    // Refetch whenever the user navigates (Navbar sits outside <Routes>,
+    // so this ensures fresh data after journeys like purchasing tickets).
+    window.addEventListener("notifications:updated", loadNotifications);
+
+    // Safety net: a purchase can complete without any navigation (e.g. a
+    // free ticket confirmed inside the BuyTickets modal), so poll quietly.
+    const poll = window.setInterval(loadNotifications, 20000);
+
+    return () => {
+      window.removeEventListener("notifications:updated", loadNotifications);
+      window.clearInterval(poll);
+    };
+  }, [location.pathname]);
+
+  async function loadNotifications() {
+    setNotifLoading(true);
+    try {
+      const data = await notificationsApi.getNotifications();
+      setNotifications(data.notifications);
+      setUnreadCount(data.unreadCount);
+    } catch {
+      // Logged-out visitors simply don't see a badge; ignore silently.
+    } finally {
+      setNotifLoading(false);
+    }
+  }
+
+  async function handleNotifOpen(open: boolean) {
+    setNotifOpen(open);
+    if (open && unreadCount > 0) {
+      try {
+        await notificationsApi.markAllRead();
+        setUnreadCount(0);
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      } catch {
+        // Non-critical: keep the unread badge until the next fetch.
+      }
+    }
+  }
+
+  function handleNotifClick(n: Notification) {
+    setNotifOpen(false);
+    if (n.event_id) {
+      navigate(`/events/${n.event_id}`);
+    }
+  }
+
   const profileItems: MenuProps["items"] = [
-    { key: "profile", icon: <UserOutlined />, label: <Link to="/profile">My Profile</Link> },
     { key: "settings", icon: <SettingOutlined />, label: <Link to="/settings">Settings</Link> },
     { type: "divider" },
-    { key: "logout", icon: <LogoutOutlined />, label: <Link to="/logout">Logout</Link>, danger: true },
+    { key: "logout",
+       icon: <LogoutOutlined />,
+        label: "Logout", 
+        onClick : handleLogout,
+        danger: true },
   ];
 
   const navLinks = [
@@ -70,7 +158,128 @@ export default function NavbarPage() {
 
         {/* Right Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <BellOutlined style={{ fontSize: 18, color: "#94a3b8", cursor: "pointer", padding: 6 }} />
+          <Badge count={unreadCount} size="small" offset={[-2, 4]}>
+            <Dropdown
+              trigger={["click"]}
+              placement="bottomRight"
+              open={notifOpen}
+              onOpenChange={handleNotifOpen}
+              dropdownRender={() => (
+                <div
+                  style={{
+                    width: 360,
+                    maxHeight: 440,
+                    overflowY: "auto",
+                    background: "#ffffff",
+                    borderRadius: 14,
+                    boxShadow: "0 16px 40px rgba(7, 15, 38, 0.25)",
+                    padding: 10,
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderBottom: "1px solid #f1f5f9",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <strong style={{ color: "#0d1b3e", fontSize: 14 }}>Notifications</strong>
+                    {unreadCount > 0 && (
+                      <span style={{ fontSize: 11, color: "#f43f5e", fontWeight: 700 }}>
+                        {unreadCount} new
+                      </span>
+                    )}
+                  </div>
+
+                  {notifLoading ? (
+                    <div style={{ textAlign: "center", padding: "32px 0" }}>
+                      <Spin size="small" />
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div style={{ padding: "28px 0" }}>
+                      <Empty description="No notifications yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotifClick(n)}
+                        style={{
+                          cursor: n.event_id ? "pointer" : "default",
+                          borderRadius: 10,
+                          padding: "10px 12px",
+                          marginBottom: 4,
+                          background: n.is_read ? "#ffffff" : "#eef2ff",
+                          transition: "background 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = n.is_read ? "#ffffff" : "#eef2ff")
+                        }
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 13,
+                            color: "#0d1b3e",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          {n.title}
+                          {!n.is_read && (
+                            <span
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: "#f43f5e",
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#64748b",
+                            lineHeight: 1.45,
+                            marginTop: 2,
+                          }}
+                        >
+                          {n.message}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                          {formatTimeAgo(n.created_at)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            >
+              <div
+                style={{
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 6,
+                  borderRadius: 8,
+                  transition: "background 0.2s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <BellOutlined style={{ fontSize: 18, color: "#94a3b8" }} />
+              </div>
+            </Dropdown>
+          </Badge>
           <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.15)" }} />
 
           {user ? (

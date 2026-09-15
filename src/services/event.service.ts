@@ -192,10 +192,30 @@ export async function updateEvent(
 ): Promise<EventWithTags | null> {
   await db.transaction(async (trx) => {
     const updateFields: Partial<EventRow> & { updated_at?: Date } = {};
+
+    // Allow editing a past event's other fields without losing the ability
+    // to keep its original (already-passed) start time, but block moving
+    // the start to today or earlier. Equality check means "not touching
+    // the current start_at" always passes.
+    if (data.start_at !== undefined) {
+      const existing = await trx("events").where({ id }).select("start_at").first();
+      const unchanged =
+        existing && new Date(existing.start_at).getTime() === data.start_at.getTime();
+
+      if (!unchanged) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        if (data.start_at.getTime() < tomorrow.getTime()) {
+          throw new Error("EVENT_START_TOO_SOON");
+        }
+      }
+      updateFields.start_at = data.start_at;
+    }
+
     if (data.title !== undefined) updateFields.title = data.title;
     if (data.description !== undefined) updateFields.description = data.description;
     if (data.location !== undefined) updateFields.location = data.location;
-    if (data.start_at !== undefined) updateFields.start_at = data.start_at;
     if (data.end_at !== undefined) updateFields.end_at = data.end_at;
     if (data.event_type !== undefined) updateFields.event_type = data.event_type;
 if (data.image_url !== undefined) updateFields.image_url = data.image_url;

@@ -28,7 +28,21 @@ export async function initiatePayment(req: Request, res: Response): Promise<void
       res.status(400).json({ error: "Not enough tickets remaining." });
       return;
     }
+    if (err instanceof orderService.EventFinishedError) {
+      res.status(400).json({ error: "This event has already finished. Tickets are no longer available." });
+      return;
+    }
     throw err;
+  }
+
+  // Free tickets (price 0, typically for public events) never need to
+  // touch eSewa at all — there's nothing to pay, so just mark the order
+  // completed immediately. The reservation already happened safely
+  // inside createPendingOrder above, so there's no risk of overselling.
+  if (Number(order.total_amount) === 0) {
+    await orderService.markOrderCompleted(order.transaction_uuid, "FREE");
+    res.status(200).json({ free: true, orderId: order.id });
+    return;
   }
 
   const formFields = paymentService.buildPaymentFormFields({
@@ -105,6 +119,11 @@ export async function handlePaymentFailure(req: Request, res: Response): Promise
   }
 
   res.redirect(`${env.frontendOrigin}/payment-result?status=failed&reason=cancelled_or_failed`);
+}
+
+export async function getMyOrders(req: Request, res: Response): Promise<void> {
+  const orders = await orderService.getOrdersForBuyer(req.user!.id);
+  res.status(200).json({ orders });
 }
 
 export async function getOrder(req: Request, res: Response): Promise<void> {

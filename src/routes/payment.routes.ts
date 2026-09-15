@@ -8,5 +8,6 @@ router.post("/initiate", requireAuth, paymentController.initiatePayment);
 router.get("/success", paymentController.handlePaymentSuccess);
 router.get("/failure", paymentController.handlePaymentFailure);
 router.get("/orders/:id", requireAuth, paymentController.getOrder);
+router.get("/my-orders", requireAuth, paymentController.getMyOrders);
 
 export default router;

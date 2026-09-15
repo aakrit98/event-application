@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Form,
   Input,
+  InputNumber,
   Select,
   DatePicker,
   Button,
@@ -15,6 +16,7 @@ import {
   Col,
   Upload,
   Space,
+  Tag,
 } from "antd";
 import {
   InboxOutlined,
@@ -22,6 +24,7 @@ import {
   CheckOutlined,
   ArrowRightOutlined,
   ArrowLeftOutlined,
+  PlusOutlined,
 } from "@ant-design/icons";
 import type { UploadProps } from "antd";
 import dayjs from "dayjs";
@@ -29,8 +32,9 @@ import type { Dayjs } from "dayjs";
 import { useAuth } from "../context/AuthContext";
 import * as eventsApi from "../api/events";
 import * as tagsApi from "../api/tags";
+import * as ticketApi from "../api/ticket";
 import { uploadEventImage } from "../api/upload"; // adjust path if needed
-import type { Tag, EventFormInput } from "../types";
+import type { Tag as TagType, EventFormInput, TicketFormInput } from "../types";
 import type { AxiosError } from "axios";
 
 const { Title, Text, Paragraph } = Typography;
@@ -56,7 +60,7 @@ export default function EventFormPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepOneValues, setStepOneValues] = useState<FormValues | null>(null);
 
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [availableTags, setAvailableTags] = useState<TagType[]>([]);
   const [loading, setLoading] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -66,6 +70,16 @@ export default function EventFormPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+
+  // Ticket creation state (Step 3)
+  const [ticketSeats, setTicketSeats] = useState<number>(100);
+  const [ticketDrafts, setTicketDrafts] = useState<TicketFormInput[]>([]);
+  const [draft, setDraft] = useState<TicketFormInput>({
+    name: "",
+    price: 0,
+    quantity_available: 1,
+    description: "",
+  });
 
   useEffect(() => {
     tagsApi.listTags().then(setAvailableTags).catch(() => {});
@@ -197,15 +211,40 @@ export default function EventFormPage() {
         image_url: finalImageUrl,
       };
 
+      let createdId: number | undefined;
       if (isEditMode && id) {
         const updated = await eventsApi.updateEvent(Number(id), input);
         message.success("Event updated successfully.");
-        navigate(`/events/${updated.id}`);
+        createdId = updated.id;
       } else {
         const created = await eventsApi.createEvent(input);
         message.success("Event created successfully.");
-        navigate(`/events/${created.id}`);
+        createdId = created.id;
+
+        // Ticket creation (Step 3): public events get one auto-generated
+        // free "General Admission" ticket with the chosen number of seats;
+        // private events get the manually configured ticket tiers.
+        if (createdId) {
+          try {
+            if (values.event_type === "public") {
+              await ticketApi.createTicket(createdId, {
+                name: "General Admission",
+                price: 0,
+                quantity_available: ticketSeats,
+                description: "Free seat for this public event.",
+              });
+            } else {
+              for (const t of ticketDrafts) {
+                await ticketApi.createTicket(createdId, t);
+              }
+            }
+            message.success("Tickets were generated successfully.");
+          } catch {
+            message.warning("Event created, but tickets could not be generated. You can add tickets later from the event page.");
+          }
+        }
       }
+      if (createdId) navigate(`/events/${createdId}`);
     } catch (err: unknown) {
       console.error("Save event error:", err);
       const axiosErr = err as AxiosError<{ error?: string; message?: string }>;
@@ -368,9 +407,13 @@ export default function EventFormPage() {
         <div
           style={{
             flex: 1,
-            height: 1,
-            background: "#e2e8f0",
+            height: 2,
+            background:
+              currentStep >= 2
+                ? "linear-gradient(90deg, #f43f5e 0%, #8b5cf6 100%)"
+                : "#e2e8f0",
             margin: "0 16px",
+            transition: "all 0.3s ease",
           }}
         />
 
@@ -381,18 +424,33 @@ export default function EventFormPage() {
               width: 32,
               height: 32,
               borderRadius: "50%",
-              background: "#f1f5f9",
-              color: "#94a3b8",
+              background:
+                currentStep === 2
+                  ? "linear-gradient(135deg, #f43f5e 0%, #8b5cf6 100%)"
+                  : "#e0e7ff",
+              color: currentStep === 2 ? "#ffffff" : "#6366f1",
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: currentStep === 2 ? 700 : 600,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              boxShadow:
+                currentStep === 2
+                  ? "0 2px 8px rgba(244, 63, 94, 0.35)"
+                  : "none",
+              transition: "all 0.3s ease",
             }}
           >
-            03
+            {currentStep > 2 ? <CheckOutlined style={{ fontSize: 13 }} /> : "03"}
           </div>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "#94a3b8" }}>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: currentStep === 2 ? 700 : 500,
+              color: currentStep === 2 ? "#0f172a" : "#94a3b8",
+              transition: "all 0.3s ease",
+            }}
+          >
             Ticket Creation
           </span>
         </div>
@@ -493,7 +551,27 @@ export default function EventFormPage() {
                 <Form.Item
                   name="start_at"
                   label={<Text strong style={{ color: "#334155" }}>Start Date/Time</Text>}
-                  rules={[{ required: true, message: "Start date/time is required" }]}
+                  rules={[
+                    { required: true, message: "Start date/time is required" },
+                    // Only enforce "from tomorrow" when creating a new event
+                    // (not editing an existing one whose start date may be past)
+                    ...(!isEditMode
+                      ? [
+                          {
+                            validator(_: unknown, value: Dayjs | undefined) {
+                              if (!value) return Promise.resolve();
+                              const tomorrow = dayjs().startOf("day").add(1, "day");
+                              if (value.isBefore(tomorrow)) {
+                                return Promise.reject(
+                                  new Error("Events can only be created to start from tomorrow or later.")
+                                );
+                              }
+                              return Promise.resolve();
+                            },
+                          },
+                        ]
+                      : []),
+                  ]}
                 >
                   <DatePicker
                     showTime
@@ -800,6 +878,256 @@ export default function EventFormPage() {
 
               <Button
                 type="primary"
+                loading={isEditMode ? submitting : false}
+                onClick={() => (isEditMode ? handleSubmit() : setCurrentStep(2))}
+                style={{
+                  height: 44,
+                  padding: "0 32px",
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  border: "none",
+                  background: "linear-gradient(135deg, #f43f5e 0%, #8b5cf6 100%)",
+                  boxShadow: "0 4px 14px rgba(244, 63, 94, 0.3)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                {isEditMode ? "Save Changes" : <>Next: Ticket Creation <ArrowRightOutlined /></>}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: TICKET CREATION (create mode only) */}
+        {currentStep === 2 && !isEditMode && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <Title
+                level={3}
+                style={{
+                  margin: "0 0 6px",
+                  fontWeight: 800,
+                  fontSize: 24,
+                  color: "#0f172a",
+                  letterSpacing: -0.4,
+                }}
+              >
+                {stepOneValues?.event_type === "public" ? "Set Seats" : "Create Ticket Tiers"}
+              </Title>
+              <Text type="secondary" style={{ fontSize: 14 }}>
+                {stepOneValues?.event_type === "public"
+                  ? "For a public event there are no VIP / Early Bird / General tiers — just a single free ticket with a set number of seats."
+                  : "Add paid ticket tiers for your private event (General, VIP, Early Bird, etc.)."}
+              </Text>
+            </div>
+
+            {stepOneValues?.event_type === "public" ? (
+              /* Public events: single free ticket with a seat count */
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 14,
+                  padding: "22px 24px",
+                }}
+              >
+                <Text strong style={{ color: "#0f172a", fontSize: 15, display: "block", marginBottom: 6 }}>
+                  Number of seats available
+                </Text>
+                <InputNumber
+                  id="public-seats"
+                  min={1}
+                  max={100000}
+                  value={ticketSeats}
+                  onChange={(val) => setTicketSeats(val ?? 100)}
+                  style={{
+                    width: 180,
+                    height: 46,
+                    borderRadius: 10,
+                    fontSize: 15,
+                    border: "1px solid #e2e8f0",
+                  }}
+                />
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    color: "#64748b",
+                  }}
+                >
+                  <Tag color="green" style={{ borderRadius: 6, fontWeight: 700 }}>
+                    FREE
+                  </Tag>
+                  <span>
+                    A "<strong>General Admission</strong>" ticket with{" "}
+                    <strong>{ticketSeats}</strong> seat{ticketSeats !== 1 ? "s" : ""} will be
+                    generated automatically.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* Private events: configurable ticket tiers */
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {ticketDrafts.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "16px 20px",
+                      background: "#f8fafc",
+                      borderRadius: 12,
+                      border: "1px dashed #cbd5e1",
+                      textAlign: "center",
+                      color: "#64748b",
+                      fontSize: 13,
+                    }}
+                  >
+                    No ticket tiers added yet. Add a tier below (e.g. General Admission, VIP, Early Bird).
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {ticketDrafts.map((t, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "12px 16px",
+                          borderRadius: 12,
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{t.name}</div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                            {Number(t.price) === 0 ? "Free" : `NPR ${t.price}`} &middot; {t.quantity_available} seat{t.quantity_available !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => setTicketDrafts((prev) => prev.filter((_, i) => i !== idx))}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tier builder */}
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 14,
+                    padding: "18px 20px",
+                  }}
+                >
+                  <Text strong style={{ color: "#0f172a", fontSize: 14, display: "block", marginBottom: 12 }}>
+                    Add Ticket Tier
+                  </Text>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <Input
+                      placeholder="Tier Name (e.g. General Admission)"
+                      value={draft.name}
+                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                      style={{ height: 42, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                    />
+                    <Row gutter={12}>
+                      <Col xs={12}>
+                        <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 4 }}>
+                          PRICE (NPR)
+                        </Text>
+                        <InputNumber
+                          min={0}
+                          value={draft.price}
+                          onChange={(val) => setDraft({ ...draft, price: val ?? 0 })}
+                          style={{ width: "100%", height: 42, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                        />
+                      </Col>
+                      <Col xs={12}>
+                        <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "block", marginBottom: 4 }}>
+                          SEATS
+                        </Text>
+                        <InputNumber
+                          min={1}
+                          value={draft.quantity_available}
+                          onChange={(val) => setDraft({ ...draft, quantity_available: val ?? 1 })}
+                          style={{ width: "100%", height: 42, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                        />
+                      </Col>
+                    </Row>
+                    <Input
+                      placeholder="Short perk description (optional)"
+                      value={draft.description ?? ""}
+                      onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                      style={{ height: 42, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                    />
+                    <Button
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        if (!draft.name.trim()) {
+                          message.error("Please enter a ticket tier name.");
+                          return;
+                        }
+                        if ((draft.quantity_available ?? 0) < 1) {
+                          message.error("Seats must be at least 1.");
+                          return;
+                        }
+                        setTicketDrafts((prev) => [...prev, { ...draft }]);
+                        setDraft({ name: "", price: 0, quantity_available: 1, description: "" });
+                      }}
+                      style={{
+                        height: 40,
+                        borderRadius: 10,
+                        fontWeight: 600,
+                        border: "1px solid #c7d2fe",
+                        color: "#6366f1",
+                        background: "#eef2ff",
+                      }}
+                    >
+                      Add Tier
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 Actions */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 32,
+                paddingTop: 20,
+                borderTop: "1px solid #f1f5f9",
+              }}
+            >
+              <Button
+                onClick={() => setCurrentStep(1)}
+                icon={<ArrowLeftOutlined />}
+                disabled={submitting}
+                style={{
+                  height: 44,
+                  padding: "0 22px",
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                Back to Media
+              </Button>
+
+              <Button
+                type="primary"
                 loading={submitting}
                 onClick={handleSubmit}
                 style={{
@@ -813,7 +1141,7 @@ export default function EventFormPage() {
                   boxShadow: "0 4px 14px rgba(244, 63, 94, 0.3)",
                 }}
               >
-                {isEditMode ? "Save Changes" : "Create Event"}
+                Create Event
               </Button>
             </div>
           </div>

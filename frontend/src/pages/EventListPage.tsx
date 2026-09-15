@@ -5,7 +5,6 @@ import {
   Select,
   Button,
   Pagination,
-  Popconfirm,
   Typography,
   Space,
   Empty,
@@ -26,6 +25,7 @@ import { useAuth } from "../context/AuthContext";
 import * as eventsApi from "../api/events";
 import * as tagsApi from "../api/tags";
 import type { Event, Tag } from "../types";
+import { useDeleteConfirm } from "../hooks/Usedeleteconfirm";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -184,15 +184,20 @@ export default function EventListPage() {
     setFilters(DEFAULT_FILTERS);
   }
 
-  async function handleDelete(id: number) {
-    try {
+  
+  // back once the user confirms in the modal.
+  const { requestDelete, modal: deleteModal } = useDeleteConfirm<number>(
+    async (id) => {
       await eventsApi.deleteEvent(id);
-      message.success("Event deleted.");
       fetchEvents();
-    } catch {
-      message.error("Failed to delete event.");
+    },
+    {
+      title: "Delete this event?",
+      description: "This action cannot be undone.",
+      successMessage: "Event deleted.",
+      errorMessage: "Failed to delete event.",
     }
-  }
+  );
 
   const activeFiltersCount =
     (filters.event_type ? 1 : 0) +
@@ -746,17 +751,13 @@ export default function EventListPage() {
                             <Link to={`/events/edit/${event.id}`}>
                               <Button size="small">Edit</Button>
                             </Link>
-                            <Popconfirm
-                              title="Delete this event?"
-                              description="This action cannot be undone."
-                              onConfirm={() => handleDelete(event.id)}
-                              okText="Delete"
-                              okButtonProps={{ danger: true }}
+                            <Button
+                              size="small"
+                              danger
+                              onClick={() => requestDelete(event.id)}
                             >
-                              <Button size="small" danger>
-                                Delete
-                              </Button>
-                            </Popconfirm>
+                              Delete
+                            </Button>
                           </Space>
                         )}
                       </div>
@@ -781,6 +782,8 @@ export default function EventListPage() {
           </div>
         )}
       </div>
+
+      {deleteModal}
     </div>
   );
 }

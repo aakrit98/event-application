@@ -9,6 +9,7 @@ import uploadRoutes from "./routes/upload.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import ticketRoutes from "./routes/ticket.routes"; 
 import paymentRoutes from "./routes/payment.routes";
+import notificationRoutes from "./routes/notification.routes";
 
 
 const app = express();
@@ -28,12 +29,13 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth", authRoutes); 
 app.use("/api/events", eventRoutes); 
 app.use("/api/tags" , tagRoutes); 
+app.use("/api/uploads" , uploadRoutes);
+app.use("/api/tickets" , ticketRoutes); 
+app.use("/api/payments", paymentRoutes);
 // Must be registered LAST, after every route — this is what catches
 // thrown/rejected errors from any controller above and turns them
 // into clean JSON responses instead of crashing the server. 
-app.use("/api/uploads" , uploadRoutes);
-app.use(errorHandler); 
-app.use("/api/tickets" , ticketRoutes); 
-app.use("/api/payments", paymentRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use(errorHandler);
 
 export default app;

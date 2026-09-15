@@ -19,6 +19,19 @@ export const createEventSchema = z
   .refine((data) => !data.end_at || data.end_at >= data.start_at, {
     message: "End date/time cannot be before the start date/time",
     path: ["end_at"],
+  })
+  // An event can only be posted from tomorrow onwards — no "today /
+  // already in the past" start times. Compared against the server's local
+  // start of tomorrow so "event on the 16th" is only allowed once the 16th
+  // is actually the next calendar day.
+  .refine((data) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return data.start_at.getTime() >= tomorrow.getTime();
+  }, {
+    message: "Events can only be created to start from tomorrow or later",
+    path: ["start_at"],
   });
 
 // Same shape as create, but every field is optional — a PATCH-style

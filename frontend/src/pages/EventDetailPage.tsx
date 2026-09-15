@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Button,
-  Popconfirm,
   Spin,
   Result,
   message,
   Card,
-  Tooltip,
   Row,
   Col,
   Tag as AntTag,
+  Modal,
+  Typography,
 } from "antd";
 import {
   ArrowLeftOutlined,
@@ -21,13 +21,16 @@ import {
   UserOutlined,
   InfoCircleOutlined,
   CompassOutlined,
-  MinusOutlined,
-  PlusOutlined,
+  ExportOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../context/AuthContext";
 import * as eventsApi from "../api/events";
 import type { Event } from "../types";
 import type { AxiosError } from "axios";
+import TicketManager from "../components/TicketManager";
+import BuyTickets from "../components/BuyTickets";
+import { useDeleteConfirm } from "../hooks/Usedeleteconfirm";
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,7 +40,7 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [ticketQuantity, setTicketQuantity] = useState(1);
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   useEffect(() => {
     const eventId = Number(id);
@@ -82,17 +85,19 @@ export default function EventDetailPage() {
     };
   }, [id]);
 
-  async function handleDelete() {
-    if (!event) return;
-
-    try {
+  const { requestDelete, modal: deleteModal } = useDeleteConfirm(
+    async () => {
+      if (!event) return;
       await eventsApi.deleteEvent(event.id);
-      message.success("Event deleted successfully.");
       navigate("/events");
-    } catch {
-      message.error("Failed to delete the event. Please try again.");
+    },
+    {
+      title: "Delete event?",
+      description: "This action cannot be undone.",
+      successMessage: "Event deleted successfully.",
+      errorMessage: "Failed to delete the event. Please try again.",
     }
-  }
+  );
 
   function formatHeroDate(dateStr: string) {
     return new Intl.DateTimeFormat("en-US", {
@@ -140,20 +145,35 @@ export default function EventDetailPage() {
     );
   }
 
-  const isOwner = user?.id === event.creator_id;
-  const primaryTag = event.tags?.[0]?.name; 
-  const eventType = event.event_type;
-  const eventImageUrl = (event as { image_url?: string }).image_url;
+  // Robust ID normalization
+  const isOwner = Number(user?.id) === Number(event.creator_id);
+  const isPrivate = event.event_type === "private";
+  const primaryTag = event.tags?.[0]?.name;
 
+  const eventFinished = event.end_at
+    ? Date.now() >= new Date(event.end_at).getTime()
+    : Date.now() >= new Date(event.start_at).getTime();
 
-   const uploadedImage =
+  const uploadedImage =
     (event as { image_url?: string; imageUrl?: string }).image_url ||
     (event as { image_url?: string; imageUrl?: string }).imageUrl ||
     null;
-  
+
+  const googleMapsUrl = event.location
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`
+    : null;
+
+  function handleTicketAction() {
+    if (!isOwner && !user) {
+      navigate("/login");
+      return;
+    }
+    setTicketModalOpen(true);
+  }
+
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh" }}>
-      {/* Hero Header: Shows the user's uploaded image if present, otherwise clean dark navy */}
+      {/* Hero Header */}
       <section
         style={{
           position: "relative",
@@ -161,7 +181,7 @@ export default function EventDetailPage() {
           minHeight: 320,
           backgroundColor: "#0d1b3e",
           backgroundImage: uploadedImage
-            ? `linear-gradient(180deg, rgba(13, 27, 62, 0.75) 0%, rgba(13, 27, 62, 0.95) 100%), url(${uploadedImage})`
+            ? `linear-gradient(180deg, rgba(13, 27, 62, 0.78) 0%, rgba(13, 27, 62, 0.96) 100%), url(${uploadedImage})`
             : "linear-gradient(180deg, #0d1b3e 0%, #0a1329 100%)",
           backgroundSize: "cover",
           backgroundPosition: "center",
@@ -197,7 +217,7 @@ export default function EventDetailPage() {
                 textDecoration: "none",
                 fontSize: 14,
                 fontWeight: 600,
-                background: "rgba(15, 23, 42, 0.5)",
+                background: "rgba(15, 23, 42, 0.55)",
                 padding: "6px 14px",
                 borderRadius: 8,
                 backdropFilter: "blur(6px)",
@@ -209,7 +229,7 @@ export default function EventDetailPage() {
 
             {isOwner && (
               <div style={{ display: "flex", gap: 10 }}>
-                <Link to={`/events/edit/${event.id}`}>
+                <Link to={`/events/${event.id}/edit`}>
                   <Button
                     icon={<EditOutlined />}
                     style={{
@@ -223,18 +243,14 @@ export default function EventDetailPage() {
                   </Button>
                 </Link>
 
-                <Popconfirm
-                  title="Delete event?"
-                  description="This action cannot be undone."
-                  onConfirm={handleDelete}
-                  okText="Delete"
-                  cancelText="Cancel"
-                  okButtonProps={{ danger: true }}
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  style={{ borderRadius: 8 }}
+                  onClick={() => requestDelete()}
                 >
-                  <Button danger icon={<DeleteOutlined />} style={{ borderRadius: 8 }}>
-                    Delete
-                  </Button>
-                </Popconfirm>
+                  Delete
+                </Button>
               </div>
             )}
           </div>
@@ -262,10 +278,9 @@ export default function EventDetailPage() {
             <span
               style={{
                 display: "inline-block",
-                backgroundColor:
-                  event.event_type === "public"
-                    ? "rgba(16, 185, 129, 0.85)"
-                    : "rgba(245, 158, 11, 0.85)",
+                backgroundColor: isPrivate
+                  ? "rgba(245, 158, 11, 0.85)"
+                  : "rgba(16, 185, 129, 0.85)",
                 color: "#ffffff",
                 fontWeight: 700,
                 fontSize: 11,
@@ -275,7 +290,7 @@ export default function EventDetailPage() {
                 borderRadius: 6,
               }}
             >
-              {event.event_type === "private" ? "Private Event" : "Public Event"}
+              {isPrivate ? "Private Event" : "Public Event"}
             </span>
           </div>
 
@@ -293,7 +308,7 @@ export default function EventDetailPage() {
             {event.title}
           </h1>
 
-          {/* Date & Location */}
+          {/* Date & Location with Google Maps link */}
           <div
             style={{
               display: "flex",
@@ -311,21 +326,24 @@ export default function EventDetailPage() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <EnvironmentOutlined style={{ color: "#f43f5e", fontSize: 17 }} />
-              <span>{event.location || "Venue TBA"}</span>
+              {googleMapsUrl ? (
+                <a
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#e2e8f0", textDecoration: "underline" }}
+                >
+                  {event.location} <ExportOutlined style={{ fontSize: 12, marginLeft: 2 }} />
+                </a>
+              ) : (
+                <span>Venue TBA</span>
+              )}
             </div>
-          </div>  
-          <div> 
-            <div style={{ marginTop : "20px"}}>
-          <strong> 
-  {event.event_type === "private" ? "Private Event" : "Public Event"}
-</strong>
-</div>
-</div>
-        </div> 
-        
+          </div>
+        </div>
       </section>
 
-      {/* Main 2-Column Content Body */}
+      {/* Main Content Body */}
       <main
         style={{
           maxWidth: 1280,
@@ -348,7 +366,7 @@ export default function EventDetailPage() {
               >
                 About the Event
               </h2>
-              
+
               <p
                 style={{
                   fontSize: 15,
@@ -375,12 +393,7 @@ export default function EventDetailPage() {
                 Event Schedule
               </h2>
 
-              <div
-                style={{
-                  borderTop: "1px solid #e2e8f0",
-                }}
-              >
-                {/* Agenda Row 1: Start */}
+              <div style={{ borderTop: "1px solid #e2e8f0" }}>
                 <div
                   style={{
                     display: "flex",
@@ -418,7 +431,6 @@ export default function EventDetailPage() {
                   </div>
                 </div>
 
-                {/* Agenda Row 2: Main Event */}
                 <div
                   style={{
                     display: "flex",
@@ -437,7 +449,7 @@ export default function EventDetailPage() {
                       flexShrink: 0,
                     }}
                   >
-                    Main Event
+                    {formatTimeOnly(event.start_at)}
                   </div>
                   <div>
                     <h4
@@ -448,15 +460,14 @@ export default function EventDetailPage() {
                         color: "#0f172a",
                       }}
                     >
-                      {event.title}
+                      Main Event
                     </h4>
                     <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
-                      Primary showcase, presentations, and interactive experiences.
+                      {event.title} — Key presentations, showcase, and networking.
                     </p>
                   </div>
                 </div>
 
-                {/* Agenda Row 3: Conclude */}
                 {event.end_at && (
                   <div
                     style={{
@@ -490,7 +501,7 @@ export default function EventDetailPage() {
                         Event Concludes
                       </h4>
                       <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
-                        Networking wrap-up and departures.
+                        Wrap-up and attendee departures.
                       </p>
                     </div>
                   </div>
@@ -498,7 +509,7 @@ export default function EventDetailPage() {
               </div>
             </section>
 
-            {/* Tags & Categories */}
+            {/* Tags */}
             {event.tags && event.tags.length > 0 && (
               <section>
                 <h2
@@ -533,10 +544,10 @@ export default function EventDetailPage() {
             )}
           </Col>
 
-          {/* Right Column: Ticket Card & Venue Box */}
+          {/* Right Column: Unified Ticket Card & Venue Box */}
           <Col xs={24} lg={9}>
             <div style={{ position: "sticky", top: 88, display: "flex", flexDirection: "column", gap: 24 }}>
-              {/* Ticket Card */}
+              {/* Unified Ticket Card (Works for BOTH Public and Private Events) */}
               <Card
                 style={{
                   borderRadius: 20,
@@ -557,87 +568,72 @@ export default function EventDetailPage() {
                     marginBottom: 8,
                   }}
                 >
-                  Standard General Admission
+                  {isOwner ? "Organizer Ticketing" : "Event Passes"}
                 </span>
 
                 <div
                   style={{
-                    fontSize: 36,
-                    fontWeight: 800,
-                    color: "#0f172a",
-                    letterSpacing: -1,
-                    marginBottom: 24,
+                    fontSize: 15,
+                    color: "#475569",
+                    marginBottom: 20,
+                    lineHeight: 1.6,
                   }}
                 >
-                  Free
+                  {isOwner
+                    ? "Configure ticket tiers, pricing, capacity, and view attendee ticket sales."
+                    : isPrivate
+                    ? "Select ticket tier and reserve your spot. Paid via eSewa checkout."
+                    : "Admission passes & ticket tiers available for this event."}
                 </div>
 
-                {/* Quantity Control */}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 24,
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#334155" }}>
-                    Quantity
-                  </span>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 10,
-                      padding: "4px 8px",
-                    }}
-                  >
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<MinusOutlined style={{ fontSize: 12 }} />}
-                      disabled={ticketQuantity <= 1}
-                      onClick={() => setTicketQuantity((q) => Math.max(1, q - 1))}
-                    />
-                    <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: "center" }}>
-                      {ticketQuantity}
-                    </span>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<PlusOutlined style={{ fontSize: 12 }} />}
-                      onClick={() => setTicketQuantity((q) => q + 1)}
-                    />
-                  </div>
-                </div>
-
-                {/* Get Tickets CTA */}
                 <Button
                   type="primary"
                   block
+                  disabled={eventFinished && !isOwner}
                   style={{
                     height: 50,
                     borderRadius: 12,
                     fontWeight: 700,
                     fontSize: 16,
                     border: "none",
-                    background: "linear-gradient(135deg, #f43f5e 0%, #8b5cf6 100%)",
-                    boxShadow: "0 4px 16px rgba(244, 63, 94, 0.35)",
+                    background: eventFinished && !isOwner
+                      ? "#cbd5e1"
+                      : "linear-gradient(135deg, #f43f5e 0%, #8b5cf6 100%)",
+                    boxShadow: eventFinished && !isOwner
+                      ? "none"
+                      : "0 4px 16px rgba(244, 63, 94, 0.35)",
                     marginBottom: 20,
+                    color: eventFinished && !isOwner ? "#94a3b8" : "#fff",
                   }}
-                  onClick={() => message.success(`Selected ${ticketQuantity} ticket(s)`)}
+                  onClick={handleTicketAction}
                 >
-                  Get Tickets
+                  {isOwner
+                    ? "Manage Tickets"
+                    : eventFinished
+                    ? "Event Finished"
+                    : user
+                    ? "Get Tickets"
+                    : "Log in to Get Tickets"}
                 </Button>
 
-                {/* Meta details */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 16, borderTop: "1px solid #f1f5f9" }}>
+                {/* Assurance details */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                    paddingTop: 16,
+                    borderTop: "1px solid #f1f5f9",
+                  }}
+                >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", fontSize: 13 }}>
                     <UserOutlined style={{ color: "#94a3b8" }} />
-                    <span>Hosted by Eventify</span>
+                    <span>Hosted on Eventify</span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", fontSize: 13 }}>
+                    <SafetyCertificateOutlined style={{ color: "#10b981" }} />
+                    <span>Instant digital ticket delivery</span>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", fontSize: 13 }}>
@@ -647,7 +643,7 @@ export default function EventDetailPage() {
                 </div>
               </Card>
 
-              {/* Venue / Location Card */}
+              {/* Venue / Location Card with Google Maps search link */}
               <Card
                 style={{
                   borderRadius: 20,
@@ -675,17 +671,61 @@ export default function EventDetailPage() {
                   </div>
                 }
               >
-                <h4 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-                  {event.location || "Location Venue"}
+                <h4 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+                  {event.location || "Venue Location"}
                 </h4>
-                <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
-                  {event.location ? `${event.location}` : "Detailed address provided upon registration."}
-                </p>
+
+                {googleMapsUrl ? (
+                  <a
+                    href={googleMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: 13,
+                      color: "#6366f1",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Open in Google Maps <ExportOutlined style={{ fontSize: 12 }} />
+                  </a>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
+                    Detailed address provided upon registration.
+                  </p>
+                )}
               </Card>
             </div>
           </Col>
         </Row>
       </main>
+
+      {deleteModal}
+
+      {/* Unified Ticketing Modal: active for BOTH public and private events */}
+      <Modal
+        title={isOwner ? "Manage Event Tickets" : "Select & Buy Tickets"}
+        open={ticketModalOpen}
+        onCancel={() => setTicketModalOpen(false)}
+        footer={null}
+        width={580}
+        destroyOnClose
+      >
+        {isOwner ? (
+          <TicketManager eventId={event.id} />
+        ) : user ? (
+          <BuyTickets eventId={event.id} eventFinished={eventFinished} eventType={event.event_type} />
+        ) : (
+          <Typography.Paragraph style={{ marginTop: 16 }}>
+            <Link to="/login" onClick={() => setTicketModalOpen(false)}>
+              Log in
+            </Link>{" "}
+            to get tickets for this event.
+          </Typography.Paragraph>
+        )}
+      </Modal>
     </div>
   );
 }
