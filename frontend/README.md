@@ -16,12 +16,12 @@ Runs at `http://localhost:5173`. The backend must be running at `http://localhos
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Runs the dev server with hot reload |
-| `npm run build` | Type-checks and builds for production |
-| `npm run preview` | Serves the production build locally |
-| `npm run lint` | Runs ESLint |
+| Command           | What it does                          |
+| ----------------- | ------------------------------------- |
+| `npm run dev`     | Runs the dev server with hot reload   |
+| `npm run build`   | Type-checks and builds for production |
+| `npm run preview` | Serves the production build locally   |
+| `npm run lint`    | Runs ESLint                           |
 
 ## Where things live
 
@@ -31,7 +31,7 @@ src/
   api/        -> calls to the backend (shared axios client)
   context/    -> shared app state (e.g. logged-in user)
   components/ -> reusable UI pieces
-  layouts/    -> page shells (navbar, footer)
+
   hooks/      -> reusable logic
   types/      -> shared TypeScript types
 ```
