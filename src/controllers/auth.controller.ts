@@ -4,6 +4,7 @@ import {
   createUser,
   verifyCredentials,
   getUserById,
+  getUserWithSecurityStatus,
   generateTwoFactorSetup,
   confirmTwoFactorSetup as confirmTwoFactorSetupService,
   verifyTwoFactorCode,
@@ -96,7 +97,7 @@ export function logout(_req: Request, res: Response): void {
 }
 
 export async function me(req: Request, res: Response): Promise<void> {
-  const user = await getUserById(req.user!.id);
+  const user = await getUserWithSecurityStatus(req.user!.id);
   if (!user) {
     res.status(404).json({ error: "User not found." });
     return;

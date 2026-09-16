@@ -64,6 +64,10 @@ export const updateEventSchema = z
 export const listEventsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
+  // Explicit row offset. When provided it takes priority over the derived
+  // (page - 1) * limit offset, which lets clients like the events list use
+  // asymmetric page sizes (3 on page 1, then 6 per page afterwards).
+  offset: z.coerce.number().int().nonnegative().optional(),
   timeframe: z.enum(["upcoming", "past", "all"]).default("all"),
   event_type: z.enum(["public", "private"]).optional(),
   tagIds: z

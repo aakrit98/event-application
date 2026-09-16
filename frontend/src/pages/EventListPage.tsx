@@ -769,18 +769,25 @@ export default function EventListPage() {
           </Row>
         )}
 
-        {/* Pagination on public list */}
-        {!isMyEventsRoute && total > 3 && (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 48 }}>
-            <Pagination
-              current={filters.page}
-              pageSize={filters.page === 1 ? 3 : 6}
-              total={total}
-              onChange={(page) => setFilters((prev) => ({ ...prev, page }))}
-              showSizeChanger={false}
-            />
-          </div>
-        )}
+        {/* Pagination on public list.
+          Page 1 shows 3 events, every later page shows 6, so compute the
+          page count from the real total instead of letting Ant derive it
+          from a single uniform page size (which would produce a phantom
+          empty page). */}
+        {!isMyEventsRoute && total > 3 && (() => {
+          const pageCount = 1 + Math.ceil((total - 3) / 6);
+          return (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 48 }}>
+              <Pagination
+                current={Math.min(filters.page, pageCount)}
+                pageSize={6}
+                total={pageCount * 6}
+                onChange={(page) => setFilters((prev) => ({ ...prev, page }))}
+                showSizeChanger={false}
+              />
+            </div>
+          );
+        })()}
       </div>
 
       {deleteModal}

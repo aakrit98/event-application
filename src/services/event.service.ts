@@ -99,7 +99,10 @@ function applyEventFilters(
 export async function listEvents(
   filters: ListEventsQuery & { creatorId?: number }
 ): Promise<PaginatedEvents> {
-  const offset = (filters.page - 1) * filters.limit;
+  // Use the explicit offset when the client provides one (it knows that
+  // page 1 shows 3 events and later pages show 6), otherwise fall back to
+  // the standard derived offset.
+  const offset = filters.offset ?? (filters.page - 1) * filters.limit;
   const hasTagFilter = !!filters.tagIds && filters.tagIds.length > 0;
 
   const dataQuery = db<EventRow>("events as e").select("e.*");

@@ -39,6 +39,16 @@ export async function getUserById(userId: number): Promise<PublicUser | null> {
   return user ? toPublicUser(user) : null;
 }
 
+// Like getUserById but also exposes the 2FA state, needed by the
+// "Settings -> Account" page so the UI can render the enable/disable
+// toggle correctly from the very first load.
+export async function getUserWithSecurityStatus(
+  userId: number
+): Promise<AuthenticatedUser | null> {
+  const user = await db<UserRow>("users").where({ id: userId }).first();
+  return user ? { ...toPublicUser(user), twoFactorEnabled: user.two_factor_enabled } : null;
+}
+
 
 export async function createUser(
   name: string,

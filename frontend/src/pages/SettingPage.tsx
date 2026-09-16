@@ -25,10 +25,12 @@ import {
   KeyOutlined,
   TagOutlined,
   EnvironmentOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "../context/AuthContext";
 import * as eventsApi from "../api/events";
 import * as paymentApi from "../api/payment";
+import { setupTwoFactor, confirmTwoFactorSetup, disableTwoFactor } from "../api/auth";
 import type { Event, OrderWithDetails } from "../types";
 
 const NAVY = "#0d1b3e";
@@ -70,6 +72,16 @@ export default function SettingsPage() {
   const [pushNotif, setPushNotif] = useState(true);
   const [eventReminders, setEventReminders] = useState(true);
   const [followerAlerts, setFollowerAlerts] = useState(false);
+
+  // Two-factor authentication (2FA)
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(
+    (user as { twoFactorEnabled?: boolean } | null)?.twoFactorEnabled ?? !!user?.twoFactorEnabled
+  );
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [settingUp2FA, setSettingUp2FA] = useState(false);
+  const [confirming2FA, setConfirming2FA] = useState(false);
+  const [disabling2FA, setDisabling2FA] = useState(false);
 
   const currentUserId =
     user?.id ??
@@ -166,6 +178,62 @@ export default function SettingsPage() {
       navigate("/login");
     } catch {
       navigate("/login");
+    }
+  }
+
+  // Keep the 2FA toggle in sync once the (async) user profile arrives
+  // with its twoFactorEnabled flag from /auth/me.
+  useEffect(() => {
+    const flag = (user as { twoFactorEnabled?: boolean } | null)?.twoFactorEnabled;
+    if (typeof flag === "boolean") {
+      setTwoFactorEnabled(flag);
+    }
+  }, [user]);
+
+  async function handleSetup2FA() {
+    setSettingUp2FA(true);
+    setTwoFactorCode("");
+    try {
+      const { qrCodeDataUrl } = await setupTwoFactor();
+      setQrCodeDataUrl(qrCodeDataUrl);
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || "Failed to start 2FA setup.");
+    } finally {
+      setSettingUp2FA(false);
+    }
+  }
+
+  async function handleConfirm2FA() {
+    if (!twoFactorCode.trim()) {
+      message.warning("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setConfirming2FA(true);
+    try {
+      await confirmTwoFactorSetup(twoFactorCode.trim());
+      setTwoFactorEnabled(true);
+      setQrCodeDataUrl(null);
+      setTwoFactorCode("");
+      message.success("Two-factor authentication is now enabled.");
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || "Invalid code. Please try again.");
+    } finally {
+      setConfirming2FA(false);
+    }
+  }
+
+  async function handleDisable2FA() {
+    setDisabling2FA(true);
+    try {
+      await disableTwoFactor();
+      setTwoFactorEnabled(false);
+      setQrCodeDataUrl(null);
+      setTwoFactorCode("");
+      message.success("Two-factor authentication has been disabled.");
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || "Failed to disable 2FA.");
+    } finally {
+      setDisabling2FA(false);
     }
   }
 
@@ -763,11 +831,144 @@ export default function SettingsPage() {
             {activeTab === "privacy" && (
               <div style={{ background: "#fff", borderRadius: 16, padding: "28px 32px", boxShadow: "0 4px 20px rgba(13,27,62,0.04)" }}>
                 <Typography.Title level={4} style={{ color: NAVY, fontWeight: 700, margin: "0 0 16px" }}>
-                  Privacy & Data
+                  Privacy & Security
                 </Typography.Title>
                 <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.6 }}>
                   Your privacy settings determine whether your profile appears in attendee lists and if public events display your organizer credentials.
                 </p>
+
+                <div style={{ height: 1, background: "#edf2f7", margin: "22px 0" }} />
+
+                <Typography.Title level={5} style={{ color: NAVY, fontWeight: 700, margin: "0 0 6px" }}>
+                  Two-Factor Authentication
+                </Typography.Title>
+                <p style={{ color: "#64748b", fontSize: 13, lineHeight: 1.6, margin: "0 0 18px" }}>
+                  Add an extra layer of security to your account. When enabled, signing in requires both your password and a 6-digit code from an authenticator app.
+                </p>
+
+                {qrCodeDataUrl ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 24,
+                      alignItems: "flex-start",
+                      flexWrap: "wrap",
+                      background: "#f8fafc",
+                      borderRadius: 12,
+                      border: "1px solid #e8eff6",
+                      padding: "20px 22px",
+                    }}
+                  >
+                    <img
+                      src={qrCodeDataUrl}
+                      alt="2FA QR code"
+                      style={{ width: 180, height: 180, borderRadius: 12, border: "1px solid #e8eff6", flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 260 }}>
+                      <p style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: "0 0 14px" }}>
+                        Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code below to confirm.
+                      </p>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        <Input
+                          size="large"
+                          placeholder="000000"
+                          maxLength={6}
+                          autoFocus
+                          value={twoFactorCode}
+                          onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))}
+                          style={{ borderRadius: 8, width: 150, textAlign: "center", letterSpacing: 4, fontSize: 20, fontWeight: 700 }}
+                        />
+                        <Button
+                          size="large"
+                          type="primary"
+                          loading={confirming2FA}
+                          onClick={handleConfirm2FA}
+                          style={{ borderRadius: 8, background: NAVY, fontWeight: 600 }}
+                        >
+                          Verify &amp; Enable
+                        </Button>
+                        <Button
+                          size="large"
+                          style={{ borderRadius: 8 }}
+                          onClick={() => {
+                            setQrCodeDataUrl(null);
+                            setTwoFactorCode("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : twoFactorEnabled ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 16,
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 12,
+                      padding: "18px 22px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: "#15803d", fontSize: 14 }}>
+                        <SafetyCertificateOutlined style={{ marginRight: 8 }} />
+                        Two-factor authentication is ON
+                      </strong>
+                      <p style={{ margin: "6px 0 0", color: "#6b8a76", fontSize: 13 }}>
+                        Your account requires a verification code on every new sign-in.
+                      </p>
+                    </div>
+                    <Popconfirm
+                      title="Disable two-factor authentication?"
+                      description="Your account will no longer require a verification code to sign in."
+                      okText="Yes, disable"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={handleDisable2FA}
+                      disabled={disabling2FA}
+                    >
+                      <Button danger size="large" loading={disabling2FA} style={{ borderRadius: 8, fontWeight: 600 }}>
+                        Disable 2FA
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 16,
+                      background: "#f8fafc",
+                      border: "1px solid #e8eff6",
+                      borderRadius: 12,
+                      padding: "18px 22px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: NAVY, fontSize: 14 }}>
+                        <SafetyCertificateOutlined style={{ marginRight: 8, color: "#94a3b8" }} />
+                        Two-factor authentication is OFF
+                      </strong>
+                      <p style={{ margin: "6px 0 0", color: "#8b98a9", fontSize: 13 }}>
+                        Protect your account against unauthorized access with an authenticator app.
+                      </p>
+                    </div>
+                    <Button
+                      size="large"
+                      loading={settingUp2FA}
+                      onClick={handleSetup2FA}
+                      style={{ color: NAVY, borderColor: NAVY, borderRadius: 8, fontWeight: 600 }}
+                    >
+                      Enable 2FA
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
