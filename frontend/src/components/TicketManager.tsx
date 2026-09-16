@@ -2,12 +2,20 @@ import { useEffect, useState } from "react";
 import { Button, Input, InputNumber, Popconfirm, Tag, Spin, message, Typography } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
 import { listEventTickets, createTicket, updateTicket, deleteTicket } from "../api/ticket";
-import type { Ticket, TicketFormInput } from "../types";
+import type { EventType, Ticket, TicketFormInput } from "../types";
 
 const NAVY = "#0d1b3e";
 const emptyForm: TicketFormInput = { name: "", price: 0, quantity_available: 0, description: "" };
 
-export default function TicketManager({ eventId }: { eventId: number }) {
+export default function TicketManager({
+  eventId,
+  eventType,
+}: {
+  eventId: number;
+  eventType?: EventType;
+}) {
+  // Public events are always free, so their ticket price is locked at 0.
+  const isPublic = eventType === "public";
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,7 +40,12 @@ export default function TicketManager({ eventId }: { eventId: number }) {
 
   function startEdit(t: Ticket) {
     setEditingId(t.id);
-    setForm({ name: t.name, price: Number(t.price), quantity_available: t.quantity_available, description: t.description ?? "" });
+    setForm({
+      name: t.name,
+      price: isPublic ? 0 : Number(t.price),
+      quantity_available: t.quantity_available,
+      description: t.description ?? "",
+    });
   }
 
   function resetForm() {
@@ -43,14 +56,15 @@ export default function TicketManager({ eventId }: { eventId: number }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return message.warning("Ticket name is required.");
+    const payload: TicketFormInput = isPublic ? { ...form, price: 0 } : form;
     try {
       setSaving(true);
       if (editingId != null) {
-        const updated = await updateTicket(editingId, form);
+        const updated = await updateTicket(editingId, payload);
         setTickets((prev) => prev.map((t) => (t.id === editingId ? updated : t)));
         message.success("Ticket updated.");
       } else {
-        const created = await createTicket(eventId, form);
+        const created = await createTicket(eventId, payload);
         setTickets((prev) => [...prev, created]);
         message.success("Ticket type added.");
       }
@@ -142,10 +156,16 @@ export default function TicketManager({ eventId }: { eventId: number }) {
               <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>PRICE (RS.)</span>
               <InputNumber
                 min={0}
-                value={form.price}
+                value={isPublic ? 0 : form.price}
+                disabled={isPublic}
                 onChange={(val) => setForm({ ...form, price: val || 0 })}
                 style={{ width: "100%", borderRadius: 8, marginTop: 4 }}
               />
+              {isPublic && (
+                <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>
+                  Free — public events are always Rs. 0
+                </span>
+              )}
             </div>
             <div>
               <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>QUANTITY</span>

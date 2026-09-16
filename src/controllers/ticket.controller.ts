@@ -28,9 +28,12 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
 
   // Public events use price=0 tickets (free "seats" with a capacity
   // limit); private events use priced tickets that go through eSewa.
-  // Both are now valid — this used to be restricted to private events
-  // only, but the same capacity-tracking system works for free RSVPs too.
-  const ticket = await ticketService.createTicket(eventId, input);
+  // This used to be restricted to private events only, but the same
+  // capacity-tracking system works for free RSVPs too.
+  // Enforce the free price on the server: a public event's ticket must
+  // never be created for more than Rs. 0, even if the client asks for it.
+  const safeInput = event.event_type === "public" ? { ...input, price: 0 } : input;
+  const ticket = await ticketService.createTicket(eventId, safeInput);
   res.status(201).json({ ticket });
 }
 
@@ -40,7 +43,13 @@ export async function updateTicket(req: Request, res: Response): Promise<void> {
   const id = Number(req.params.id);
   const input = updateTicketSchema.parse(req.body);
 
-  const ticket = await ticketService.updateTicket(id, input);
+  // A public event's ticket is always free. Force the price back to 0 on
+  // update as well, so it cannot be edited to a paid amount later.
+  const eventId = await ticketService.getEventIdForTicket(id);
+  const event = eventId != null ? await eventService.getEventById(eventId) : null;
+  const safeInput = event?.event_type === "public" ? { ...input, price: 0 } : input;
+
+  const ticket = await ticketService.updateTicket(id, safeInput);
   res.status(200).json({ ticket });
 }
 

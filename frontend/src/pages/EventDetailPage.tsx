@@ -229,7 +229,7 @@ export default function EventDetailPage() {
 
             {isOwner && (
               <div style={{ display: "flex", gap: 10 }}>
-                <Link to={`/events/${event.id}/edit`}>
+                <Link to={`/events/edit/${event.id}`}>
                   <Button
                     icon={<EditOutlined />}
                     style={{
@@ -714,7 +714,7 @@ export default function EventDetailPage() {
         destroyOnClose
       >
         {isOwner ? (
-          <TicketManager eventId={event.id} />
+          <TicketManager eventId={event.id} eventType={event.event_type} />
         ) : user ? (
           <BuyTickets eventId={event.id} eventFinished={eventFinished} eventType={event.event_type} />
         ) : (

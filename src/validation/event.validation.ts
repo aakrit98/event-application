@@ -13,7 +13,9 @@ export const createEventSchema = z
     start_at: z.coerce.date({ error: "A valid start date/time is required" }),
     end_at: z.coerce.date().optional().nullable(),
     event_type: z.enum(["public", "private"]).default("public"),
-    tagIds: z.array(z.number().int().positive()).optional().default([]), 
+    tagIds: z
+      .array(z.number().int().positive())
+      .min(1, "Please select at least one tag"),
     image_url: z.string().url().optional().nullable(),
   })
   .refine((data) => !data.end_at || data.end_at >= data.start_at, {

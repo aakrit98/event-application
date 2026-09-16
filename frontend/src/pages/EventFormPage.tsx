@@ -530,10 +530,11 @@ export default function EventFormPage() {
                 <Form.Item
                   name="tagIds"
                   label={<Text strong style={{ color: "#334155" }}>Tags</Text>}
+                  rules={[{ required: true, message: "Please select at least one tag" }]}
                 >
                   <Select
                     mode="multiple"
-                    placeholder="Select tags (e.g. music, tech)"
+                    placeholder="Select tags (e.g. concert, music, tech)"
                     maxTagCount="responsive"
                     style={{ minHeight: 46, width: "100%" }}
                     options={availableTags.map((t) => ({

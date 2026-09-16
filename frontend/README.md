@@ -1,4 +1,4 @@
-# Frontend — Event Planning Application
+# Frontend — Event Planning Application - root frontend is inside event-application folder
 
 This folder contains the React + TypeScript frontend, built with Vite.
 

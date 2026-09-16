@@ -89,7 +89,7 @@ FLUSH PRIVILEGES;
 
 _(Use whatever username/password you like — just make sure they match the `.env` file below.)_
 
-### Step 2 — Backend (from the project root)
+### Step 2 — Backend (from the project root) --root backend project folder name is (event-application)
 
 ```powershell
 npm install
@@ -157,15 +157,15 @@ It will run at `http://localhost:5173` — open that in your browser.
 
 ### Useful commands
 
-| Command                    | Where               | What it does                          |
-| -------------------------- | ------------------- | ------------------------------------- |
-| `npm install`              | root                | Installs backend packages             |
-| `npm install`              | `frontend/`         | Installs frontend packages            |
-| `npm run migrate`          | root                | Creates/updates all database tables   |
-| `npm run migrate:rollback` | root                | Undoes the last migration             |
-| `npm run dev`              | root                | Runs the backend at `localhost:4000`  |
-| `npm run dev`              | `frontend/`         | Runs the frontend at `localhost:5173` |
-| `npm run build`            | root or `frontend/` | Compiles the app for production       |
+| Command                    | Where                   | What it does                          |
+| -------------------------- | ----------------------- | ------------------------------------- |
+| `npm install`              | root(event-application) | Installs backend packages             |
+| `npm install`              | `frontend/`             | Installs frontend packages            |
+| `npm run migrate`          | root                    | Creates/updates all database tables   |
+| `npm run migrate:rollback` | root                    | Undoes the last migration             |
+| `npm run dev`              | root                    | Runs the backend at `localhost:4000`  |
+| `npm run dev`              | `frontend/`             | Runs the frontend at `localhost:5173` |
+| `npm run build`            | root or `frontend/`     | Compiles the app for production       |
 
 ### Troubleshooting
 
