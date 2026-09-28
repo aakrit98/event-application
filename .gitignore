@@ -1,5 +1,8 @@
-node_modules/
-dist/
-.env
-.env.* 
-!.env.example
+# Root-level ignores (backend has its own .gitignore inside backend/)
+
+# Database backup dumps kept outside the repo
+*.sql
+
+# Local env / OS junk
+.DS_Store
+Thumbs.db
