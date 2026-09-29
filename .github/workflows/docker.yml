@@ -1,0 +1,121 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker compose build backend
+
+      - name: Build frontend image
+        run: docker compose build frontend
+
+  migrations:
+    name: Migrations against an empty database
+    runs-on: ubuntu-latest
+
+    # Migrations are deliberately a separate step from starting the app.
+    # Nothing in the Dockerfile applies them, so this job is the only place
+    # that runs them -- which means a broken migration fails the build here
+    # instead of crash-looping a container at runtime.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: event_planner
+          MYSQL_USER: event_planner
+          MYSQL_PASSWORD: devpass123
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uevent_planner -pdevpass123"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_USER: event_planner
+      DB_PASSWORD: devpass123
+      DB_NAME: event_planner
+      JWT_SECRET: ci_placeholder_not_a_real_secret
+      CLOUDINARY_CLOUD_NAME: ci_placeholder
+      CLOUDINARY_API_KEY: ci_placeholder
+      CLOUDINARY_API_SECRET: ci_placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npm run migrate
+
+      - name: Confirm the tables were created
+        working-directory: backend
+        run: |
+          node -e "
+          const knex = require('knex')({
+            client: 'mysql2',
+            connection: {
+              host: process.env.DB_HOST,
+              port: Number(process.env.DB_PORT),
+              user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD,
+              database: process.env.DB_NAME,
+            },
+          });
+          knex('knex_migrations').select('name').then((rows) => {
+            console.log('Applied migrations: ' + rows.length);
+            rows.forEach((r) => console.log('  - ' + r.name));
+            return knex.destroy();
+          }).catch((err) => { console.error(err.message); process.exit(1); });
+          "
+
+      - name: Load the sample data
+        working-directory: backend
+        run: npm run seed
+
+      - name: Confirm the sample data landed
+        working-directory: backend
+        run: |
+          node -e "
+          const knex = require('knex')({
+            client: 'mysql2',
+            connection: {
+              host: process.env.DB_HOST,
+              port: Number(process.env.DB_PORT),
+              user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD,
+              database: process.env.DB_NAME,
+            },
+          });
+          Promise.all([
+            knex('users').count({ c: '*' }),
+            knex('events').count({ c: '*' }),
+            knex('tags').count({ c: '*' }),
+          ]).then(([u, e, t]) => {
+            console.log('users=' + u[0].c + ' events=' + e[0].c + ' tags=' + t[0].c);
+            return knex.destroy();
+          }).catch((err) => { console.error(err.message); process.exit(1); });
+          "

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Dropdown, Badge, Empty, Spin } from "antd";
 import type { MenuProps } from "antd";
-import { BellOutlined, UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from "@ant-design/icons";
+import { BellOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from "@ant-design/icons";
 import { useAuth } from "../context/AuthContext";
 import * as notificationsApi from "../api/notifications";
 import type { Notification } from "../types";

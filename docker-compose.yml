@@ -1,0 +1,84 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: eventify-mysql
+
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: event_planner
+      MYSQL_USER: event_planner
+      MYSQL_PASSWORD: devpass123
+
+    ports:
+      - "3307:3306"
+
+    volumes:
+      - eventify_mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "event_planner",
+          "-pdevpass123",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: eventify-backend
+
+    environment:
+      PORT: 4000
+      NODE_ENV: development
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: event_planner
+      DB_PASSWORD: devpass123
+      DB_NAME: event_planner
+
+      JWT_SECRET: YOUR_JWT_SECRET
+      JWT_EXPIRES_IN: 1h
+
+      COOKIE_NAME: ep_token
+      COOKIE_SECURE: "false"
+
+      FRONTEND_ORIGIN: http://localhost:5173
+
+      CLOUDINARY_CLOUD_NAME: YOUR_CLOUDINARY_CLOUD_NAME
+      CLOUDINARY_API_KEY: YOUR_CLOUDINARY_API_KEY
+      CLOUDINARY_API_SECRET: YOUR_CLOUDINARY_API_SECRET
+
+    ports:
+      - "4000:4000"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: eventify-frontend
+
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - backend
+
+volumes:
+  eventify_mysql_data:

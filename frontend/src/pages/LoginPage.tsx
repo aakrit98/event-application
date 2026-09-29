@@ -15,7 +15,6 @@ function getErrorMessage(err: unknown, fallback: string): string {
 }
 
 const NAVY = "#0d1b3e";
-const NAVY_HOVER = "#162a5c";
 const SOFT_BG = "#f0f4fa";
 
 export default function LoginPage() {
