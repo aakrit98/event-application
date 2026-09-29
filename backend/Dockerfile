@@ -4,7 +4,12 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci
+# See frontend/Dockerfile for why the retry/timeout flags are here.
+RUN npm ci --no-audit --no-fund \
+    --fetch-retries=5 \
+    --fetch-retry-mintimeout=20000 \
+    --fetch-retry-maxtimeout=120000 \
+    --fetch-timeout=600000
 
 COPY . .
 
