@@ -247,6 +247,12 @@ Sign in with `demo@example.com` / `Password123!`
 | `docker compose down`                           | Stop and remove the containers              |
 | `docker compose down -v`                        | Also delete the database volume — **erases all data** |
 
+### Timezone
+
+Both the database and the API are pinned to `Asia/Kathmandu` in `docker-compose.yml`. This matters more than it looks: the "events can only start from tomorrow onwards" rule is checked against the **server's** calendar day, so a container left on UTC would put that boundary 5 hours 45 minutes later than Kathmandu's. The visible symptom was an event set for, say, 00:30 Kathmandu time on the next day being rejected with a 400, even though the same event was accepted when running with `npm run dev` on the host.
+
+If you deploy this somewhere, set `TZ` to the timezone your users are actually in.
+
 ### Before sharing or deploying
 
 `docker-compose.yml` contains **placeholder values** for `JWT_SECRET` and the `CLOUDINARY_*` keys. Replace them with real values — until you do, image uploads will fail. (The demo login, payments, and everything else will still work.)
