@@ -16,20 +16,29 @@ services:
       - eventify_mysql_data:/var/lib/mysql
 
     healthcheck:
+      # -h 127.0.0.1 (not "localhost") is deliberate: it forces a TCP
+      # connection, which is the path the backend actually uses. With
+      # "localhost" the client dials a Unix socket, and on first run MySQL
+      # listens there during its temporary init phase -- so the check would
+      # report healthy before port 3306 was accepting connections, and
+      # migrations would fail with ECONNREFUSED.
       test:
         [
           "CMD",
           "mysqladmin",
           "ping",
           "-h",
-          "localhost",
+          "127.0.0.1",
           "-u",
           "event_planner",
           "-pdevpass123",
         ]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
+      # MySQL's first-run initialisation is slow; failures inside this
+      # window don't count against the retries above.
+      start_period: 30s
 
   backend:
     build:
